@@ -8,11 +8,12 @@ import glob
 import sys
 
 
-def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None):
+def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, menu_type="A"):
     """Generate PPT from the provided Excel file using the template.
 
     `excel_path` must be provided by the user and point to an existing .xlsx file.
     PPT template is fixed at templates/ppt_temp.pptx.
+    `menu_type` can be "A" or "B" to specify which meal type to generate.
     Returns the output path on success.
     """
     # 要求用户手动指定 Excel 文件路径（不再自动查找最新文件）
@@ -37,13 +38,29 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None):
     if not os.path.isfile(ppt_path):
         raise FileNotFoundError(f"未找到 PPT 模板文件: {ppt_path}\n基础路径: {base_path}")
 
-    xls = pd.ExcelFile(excel_path, engine="openpyxl")
-    target_sheet_name = next((name for name in xls.sheet_names if "二4" in name), None)
+    # 尝试读取Excel文件，支持多种格式
+    xls = None
+    df = None
+    try:
+        # 首先尝试用openpyxl引擎读取（适用于.xlsx文件）
+        try:
+            xls = pd.ExcelFile(excel_path, engine="openpyxl")
+        except Exception as e:
+            # 如果openpyxl失败，可以尝试其他引擎
+            print(f"[警告] openpyxl引擎读取失败: {str(e)}，尝试其他方式...")
+            xls = pd.ExcelFile(excel_path)
+        
+        target_sheet_name = next((name for name in xls.sheet_names if "二4" in name), None)
 
-    if not target_sheet_name:
-        raise ValueError("未找到包含 '二4' 的 sheet")
-    df = pd.read_excel(xls, sheet_name=target_sheet_name, header=None)
-    xls.close()  # 关闭Excel文件以释放资源
+        if not target_sheet_name:
+            raise ValueError(f"未找到包含 '二4' 的 sheet\n可用的工作表: {', '.join(xls.sheet_names)}")
+        
+        df = pd.read_excel(xls, sheet_name=target_sheet_name, header=None)
+        xls.close()  # 关闭Excel文件以释放资源
+    except Exception as e:
+        if xls:
+            xls.close()
+        raise ValueError(f"读取Excel文件失败: {str(e)}")
 
     # 获取日期（第二行 B-F 列）
     dates = df.iloc[1, 1:6].tolist()
@@ -52,33 +69,34 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None):
         dt = pd.to_datetime(d)
         formatted_dates.append(f"{dt.month}月{dt.day}日")
 
-    # 获取每天选择 A 餐的名单
-    a_choices = {}
+    # 获取每天选择指定餐类型的名单
+    meal_choices = {}
     for i, col in enumerate(range(1, 6)):  # B-F列
         day_students = []
         for row in range(2, len(df)):  # 从第3行开始
-            if df.iloc[row, col] == "A":
+            if df.iloc[row, col] == menu_type:
                 day_students.append(df.iloc[row, 0])  # 第A列为姓名
-        a_choices[i] = day_students
+        meal_choices[i] = day_students
 
-    # 获取“共计 x 份”数据（A列为”A餐合计“）
-    a_counts = []
+    # 获取"共计 x 份"数据（A列为"{menu_type}餐合计"）
+    meal_counts = []
+    count_label = f"{menu_type}餐合计"
     for col in range(1, 6):  # B-F列
-        total_row = df[df.iloc[:, 0] == "A餐合计"]
+        total_row = df[df.iloc[:, 0] == count_label]
         if not total_row.empty:
             count = total_row.iloc[0, col]
-            a_counts.append(count)
+            meal_counts.append(count)
         else:
-            a_counts.append(0)  # 如果没找到，默认0
+            meal_counts.append(0)  # 如果没找到，默认0
 
-    # 校验每天统计人数与“A餐合计”是否一致
+    # 校验每天统计人数与"{menu_type}餐合计"是否一致
     for i in range(5):
-        counted = len(a_choices[i])
-        expected = a_counts[i]
+        counted = len(meal_choices[i])
+        expected = meal_counts[i]
         if counted == expected:
-            print(f"[确认] 第{i+1}天 A餐人数正确：{counted}人")
+            print(f"[确认] 第{i+1}天 {menu_type}餐人数正确：{counted}人")
         else:
-            print(f"[警告] 第{i+1}天 A餐人数不一致！统计为 {counted} 人，A餐合计为 {expected} 人")
+            print(f"[警告] 第{i+1}天 {menu_type}餐人数不一致！统计为 {counted} 人，{menu_type}餐合计为 {expected} 人")
 
     # 加载 PPT 模板
     prs = Presentation(ppt_path)
@@ -128,7 +146,7 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None):
         # 插入“共计_x__份”
         for shape in shapes:
             if shape.has_text_frame and "共计" in shape.text and "份" in shape.text:
-                format_total_text(shape, a_counts[i])
+                format_total_text(shape, meal_counts[i])
                 break
 
         # 插入学生名单（表格）
@@ -139,7 +157,7 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None):
                 break
 
         if table:
-            names = a_choices[i]
+            names = meal_choices[i]
             row_idx = 0
             col_idx = 0
             for name in names:
