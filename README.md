@@ -94,19 +94,31 @@ Python依赖包列表
 ```bash
 python lunch_app_web.py
 ```
+在浏览器中访问: http://127.0.0.1:5000/
 
-### 云端部署（Heroku/Render等）
+### 云端部署（Azure App Service）
+**在线访问**: [午餐选择PPT生成器](https://lunch-selection-app-h7d2dkbbg0g2gsgw.southeastasia-01.azurewebsites.net/)
+
+启动命令:
 ```bash
 gunicorn --bind=0.0.0.0 --timeout 600 application:app
 ```
 
+详见 [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) 获取完整的部署步骤。
+
 ## 📝 更新日志
+
+### v2.1 - 2026-06-09
+- 🐛 修复 Excel 数据读取问题（改用 `data_only=True` 读取计算结果）
+- 🐛 改进 PPT 文本框更新（使用 `text_frame.clear()` 清空占位符）
+- 🚀 成功部署到 Azure App Service (东南亚区域)
 
 ### v2.0 - 2026-06-08
 - ✨ 添加A/B餐菜单类型选择功能
 - ✨ 改进用户界面，文件选择和菜单选择同行显示
 - 🐛 增强Excel文件验证机制
 - 🔧 改进错误处理和提示信息
+- 🔧 移除 pandas 依赖，完全使用 openpyxl 处理 Excel
 
 ### v1.0 - 初始版本
 - ✨ 基本的Web界面

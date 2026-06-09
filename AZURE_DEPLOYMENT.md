@@ -83,7 +83,7 @@
 4. 填写基本信息：
 
    应用名称: lunch-selection-app
-   (最终URL: https://lunch-selection-app.azurewebsites.net/)
+   (最终URL: https://lunch-selection-app-h7d2dkbbg0g2gsgw.southeastasia-01.azurewebsites.net/)
    
    发布: 代码
    
@@ -126,7 +126,7 @@
 
 ```
 1. 部署完成后，访问应用：
-   https://lunch-selection-app.azurewebsites.net/
+   https://lunch-selection-app-h7d2dkbbg0g2gsgw.southeastasia-01.azurewebsites.net/
 
 2. 如果看到午餐选择PPT生成器界面 ✅
    部署成功！
@@ -139,7 +139,7 @@
 ```
 你的应用已在线！
 
-URL: https://lunch-selection-app.azurewebsites.net/
+URL: https://lunch-selection-app-h7d2dkbbg0g2gsgw.southeastasia-01.azurewebsites.net/
 
 所有人可以访问这个链接！
 ```
@@ -604,7 +604,7 @@ az webapp deployment source config-zip \
 
 ```
 ✅ 应用状态: 运行中
-✅ URL: https://lunch-selection-app.azurewebsites.net/
+✅ URL: https://lunch-selection-app-h7d2dkbbg0g2gsgw.southeastasia-01.azurewebsites.net/
 ✅ 可以上传文件
 ✅ 可以生成PPT
 ✅ 可以下载文件
