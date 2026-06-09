@@ -40,7 +40,8 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
 
     # 尝试读取Excel文件
     try:
-        wb = load_workbook(excel_path)
+        # 使用 data_only=True 读取计算后的值，而不是公式
+        wb = load_workbook(excel_path, data_only=True)
         
         # 查找包含"二4"的工作表
         target_sheet_name = next((name for name in wb.sheetnames if "二4" in name), None)
@@ -79,9 +80,12 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
         for row_idx in range(3, ws.max_row + 1):  # 从第3行开始
             name_cell = ws.cell(row=row_idx, column=1).value
             meal_cell = ws.cell(row=row_idx, column=col_idx).value
+            if row_idx <= 10:
+                print(f"[DEBUG] Row {row_idx}, Col {col_idx}: name={name_cell}, meal={meal_cell}, menu_type={menu_type}, match={meal_cell == menu_type}")
             if meal_cell == menu_type and name_cell:
                 day_students.append(str(name_cell))
         meal_choices[i] = day_students
+        print(f"[INFO] 第{i+1}天 {menu_type}餐名单({len(day_students)}人): {day_students}")
 
     # 获取"共计 x 份"数据（A列为"{menu_type}餐合计"）
     meal_counts = []
@@ -90,10 +94,11 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
         count = 0
         for row_idx in range(3, ws.max_row + 1):
             label_cell = ws.cell(row=row_idx, column=1).value
-            if label_cell and str(label_cell) == count_label:
+            if label_cell and str(label_cell).strip() == count_label:
                 count_cell = ws.cell(row=row_idx, column=col_idx).value
                 if count_cell:
                     count = int(count_cell) if isinstance(count_cell, (int, float)) else 0
+                print(f"[INFO] 第{col_idx-1}天 {menu_type}餐共计: {count}")
                 break
         meal_counts.append(count)
 
@@ -111,39 +116,51 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
 
     # 设置表格字体样式
     def format_table_cell(cell, name):
-        cell.text = name
-        for paragraph in cell.text_frame.paragraphs:
-            paragraph.alignment = PP_ALIGN.CENTER
-            for run in paragraph.runs:
-                run.font.name = 'SimSun'
-                run.font.size = Pt(32)
-                run.font.bold = True
+        # 先清空单元格所有内容
+        text_frame = cell.text_frame
+        text_frame.clear()
+        # 添加新的段落
+        p = text_frame.paragraphs[0]
+        p.text = name
+        p.alignment = PP_ALIGN.CENTER
+        for run in p.runs:
+            run.font.name = 'SimSun'
+            run.font.size = Pt(32)
+            run.font.bold = True
 
     # 设置日期样式
     def format_date_text(shape, date_str):
-        shape.text = date_str
-        for paragraph in shape.text_frame.paragraphs:
-            for run in paragraph.runs:
-                run.font.name = 'Calibri'
-                run.font.size = Pt(54)
-                run.font.color.rgb = RGBColor(255, 102, 0)  # 橙色
-                run.font.shadow = True
-                run.font.bold = True
+        # 完全清空文本框
+        text_frame = shape.text_frame
+        text_frame.clear()
+        # 添加新段落
+        p = text_frame.paragraphs[0]
+        p.text = date_str
+        p.alignment = PP_ALIGN.CENTER
+        for run in p.runs:
+            run.font.name = 'Calibri'
+            run.font.size = Pt(54)
+            run.font.color.rgb = RGBColor(255, 102, 0)  # 橙色
+            run.font.bold = True
 
     # 设置“共计_x__份”样式
     def format_total_text(shape, count):
-        shape.text = f"共计_{count}__份"
-        for paragraph in shape.text_frame.paragraphs:
-            for run in paragraph.runs:
-                run.font.name = '字魂95号-手刻宋'
-                run.font.size = Pt(54)
-                run.font.color.rgb = RGBColor(0, 102, 255)  # 蓝色
-                run.font.reflection = True
+        text_frame = shape.text_frame
+        text_frame.clear()
+        p = text_frame.paragraphs[0]
+        p.text = f"共计_{count}__份"
+        p.alignment = PP_ALIGN.CENTER
+        for run in p.runs:
+            run.font.name = '字魂95号-手刻宋'
+            run.font.size = Pt(54)
+            run.font.color.rgb = RGBColor(0, 102, 255)  # 蓝色
+
 
     # 填充第3至第7页幻灯片
     for i in range(5):
         slide = prs.slides[i + 2]
         shapes = slide.shapes
+        print(f"\n[DEBUG] 处理第 {i+3} 页，日期={formatted_dates[i]}, 共计={meal_counts[i]}, 人数={len(meal_choices[i])}")
 
         # 插入日期
         for shape in shapes:
@@ -166,6 +183,11 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
 
         if table:
             names = meal_choices[i]
+            # 先清空所有单元格
+            for row_idx in range(len(table.rows)):
+                for col_idx in range(len(table.columns)):
+                    table.cell(row_idx, col_idx).text = ""
+            # 填充学生名单
             row_idx = 0
             col_idx = 0
             for name in names:
@@ -174,9 +196,10 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
                 cell = table.cell(row_idx, col_idx)
                 format_table_cell(cell, name)
                 col_idx += 1
-                if col_idx == 7:
+                if col_idx >= 7:
                     col_idx = 0
                     row_idx += 1
+            print(f"[DEBUG] 第{i+1}天表格填充完成: {len(names)}人")
 
     # 保存新 PPT 文件
     if output_filename is None:
