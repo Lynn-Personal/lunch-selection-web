@@ -2,9 +2,9 @@ from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
-import pandas as pd
+from openpyxl import load_workbook
+from datetime import datetime
 import os
-import glob
 import sys
 
 
@@ -38,56 +38,64 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
     if not os.path.isfile(ppt_path):
         raise FileNotFoundError(f"未找到 PPT 模板文件: {ppt_path}\n基础路径: {base_path}")
 
-    # 尝试读取Excel文件，支持多种格式
-    xls = None
-    df = None
+    # 尝试读取Excel文件
     try:
-        # 首先尝试用openpyxl引擎读取（适用于.xlsx文件）
-        try:
-            xls = pd.ExcelFile(excel_path, engine="openpyxl")
-        except Exception as e:
-            # 如果openpyxl失败，可以尝试其他引擎
-            print(f"[警告] openpyxl引擎读取失败: {str(e)}，尝试其他方式...")
-            xls = pd.ExcelFile(excel_path)
+        wb = load_workbook(excel_path)
         
-        target_sheet_name = next((name for name in xls.sheet_names if "二4" in name), None)
-
+        # 查找包含"二4"的工作表
+        target_sheet_name = next((name for name in wb.sheetnames if "二4" in name), None)
+        
         if not target_sheet_name:
-            raise ValueError(f"未找到包含 '二4' 的 sheet\n可用的工作表: {', '.join(xls.sheet_names)}")
+            raise ValueError(f"未找到包含 '二4' 的 sheet\n可用的工作表: {', '.join(wb.sheetnames)}")
         
-        df = pd.read_excel(xls, sheet_name=target_sheet_name, header=None)
-        xls.close()  # 关闭Excel文件以释放资源
+        ws = wb[target_sheet_name]
+        
     except Exception as e:
-        if xls:
-            xls.close()
         raise ValueError(f"读取Excel文件失败: {str(e)}")
 
-    # 获取日期（第二行 B-F 列）
-    dates = df.iloc[1, 1:6].tolist()
+    # 获取日期（第二行 B-F 列，即 row 2, columns B-F）
     formatted_dates = []
-    for d in dates:
-        dt = pd.to_datetime(d)
-        formatted_dates.append(f"{dt.month}月{dt.day}日")
+    for col_idx in range(2, 7):  # B-F: columns 2-6
+        cell_value = ws.cell(row=2, column=col_idx).value
+        if cell_value:
+            if isinstance(cell_value, datetime):
+                dt = cell_value
+            else:
+                try:
+                    dt = datetime.strptime(str(cell_value), "%Y-%m-%d")
+                except:
+                    dt = cell_value
+            if isinstance(dt, datetime):
+                formatted_dates.append(f"{dt.month}月{dt.day}日")
+            else:
+                formatted_dates.append(str(cell_value))
+        else:
+            formatted_dates.append("")
 
     # 获取每天选择指定餐类型的名单
     meal_choices = {}
-    for i, col in enumerate(range(1, 6)):  # B-F列
+    for i, col_idx in enumerate(range(2, 7)):  # B-F: columns 2-6
         day_students = []
-        for row in range(2, len(df)):  # 从第3行开始
-            if df.iloc[row, col] == menu_type:
-                day_students.append(df.iloc[row, 0])  # 第A列为姓名
+        for row_idx in range(3, ws.max_row + 1):  # 从第3行开始
+            name_cell = ws.cell(row=row_idx, column=1).value
+            meal_cell = ws.cell(row=row_idx, column=col_idx).value
+            if meal_cell == menu_type and name_cell:
+                day_students.append(str(name_cell))
         meal_choices[i] = day_students
 
     # 获取"共计 x 份"数据（A列为"{menu_type}餐合计"）
     meal_counts = []
     count_label = f"{menu_type}餐合计"
-    for col in range(1, 6):  # B-F列
-        total_row = df[df.iloc[:, 0] == count_label]
-        if not total_row.empty:
-            count = total_row.iloc[0, col]
-            meal_counts.append(count)
-        else:
-            meal_counts.append(0)  # 如果没找到，默认0
+    for col_idx in range(2, 7):  # B-F: columns 2-6
+        count = 0
+        for row_idx in range(3, ws.max_row + 1):
+            label_cell = ws.cell(row=row_idx, column=1).value
+            if label_cell and str(label_cell) == count_label:
+                count_cell = ws.cell(row=row_idx, column=col_idx).value
+                if count_cell:
+                    count = int(count_cell) if isinstance(count_cell, (int, float)) else 0
+                break
+        meal_counts.append(count)
 
     # 校验每天统计人数与"{menu_type}餐合计"是否一致
     for i in range(5):
@@ -173,9 +181,16 @@ def run_fill_ppt(excel_path=None, output_dir="Output", output_filename=None, men
     # 保存新 PPT 文件
     if output_filename is None:
         # 计算周数（以 9月1日为第一周）
-        first_date_str = df.iloc[1, 1]  # 取第一天的日期
-        first_date = pd.to_datetime(first_date_str)
-        semester_start = pd.to_datetime("2025-09-01")
+        first_date_str = ws.cell(row=2, column=2).value  # 取第一天的日期
+        if isinstance(first_date_str, datetime):
+            first_date = first_date_str
+        else:
+            try:
+                first_date = datetime.strptime(str(first_date_str), "%Y-%m-%d")
+            except:
+                first_date = datetime.now()
+        
+        semester_start = datetime(2025, 9, 1)
         week_number = ((first_date - semester_start).days // 7) + 1
 
         # 生成文件名
